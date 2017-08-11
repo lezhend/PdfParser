@@ -18,7 +18,7 @@ import java.util.List;
 public class PdfReader  {
 
     public static void main(String[] args){
-        String filePath = "/home/yibo/Desktop/pdf/half.PDF";
+        String filePath = "/Users/zhangshengxin/Documents/国泰君安：2016年半年度报告.PDF";
         File pdfFile = new File(filePath);
         //PDDocument document;
         //PDDocument document = PDDocument.load(pdfFile);
