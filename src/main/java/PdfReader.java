@@ -18,11 +18,13 @@ import java.util.List;
 public class PdfReader  {
 
     public static void main(String[] args){
-        String filePath = "/Users/zhangshengxin/Documents/国泰君安：2016年半年度报告.PDF";
+        String filePath = "/Users/zhangshengxin/Documents/report/0bd9b7-dad2-4060-b1f0-9d5b166d3da1.pdf";
+//        String filePath = "/Users/zhangshengxin/Documents/report/44ac30-28b9-44d7-ac87-b29bd2844fdc.pdf";
+//        String filePath = "/Users/zhangshengxin/Documents/report/1a5231-59d8-4020-b7a2-fd549c433ada.pdf";
         File pdfFile = new File(filePath);
         //PDDocument document;
         //PDDocument document = PDDocument.load(pdfFile);
-        tableFilter(pdfFile, 15);
+        tableFilter(pdfFile, 1);
 
     }
 
@@ -49,28 +51,37 @@ public class PdfReader  {
             double tableHeight = 0.0;
             int tableIndex = 1;
             for(Table tb : tables){
+                System.out.println(tb.toString());
                 double minHeightOfTable = tb.getCell(0,0).getMinY();
-                double maxHeightOfTable = tb.getCell(tb.getRows().size()-1,tb.getCols().size()-1).getMaxY();
+                double maxHeightOfTable = tb.getCell(tb.getRows().size()-1,0).getMaxY();
+                System.out.println("current maxHeightofTable: " + maxHeightOfTable);
+                System.out.println("current minHeightofTable: " + minHeightOfTable);
                 // Find the minimum height of table by visiting all columns of the first row
                 for(int j = 0; j < tb.getCols().size(); j++){
                     if (tb.getCell(0,j).getMinY() == 0.0)
                         continue;
-                    if (minHeightOfTable < tb.getCell(0,j).getMinY())
+                    if (minHeightOfTable == 0.0 || minHeightOfTable > tb.getCell(0,j).getMinY())
                         minHeightOfTable = tb.getCell(0,j).getMinY();
                 }
-                tableHeight = minHeightOfTable - currentHeight - 15;  // Set bottom buffer as 15
-                Rectangle2D rect = new Rectangle2D.Double(0,currentHeight,pageWidth,tableHeight);
+                System.out.println(minHeightOfTable);
+                tableHeight = minHeightOfTable - currentHeight;  // Set bottom buffer as 15
+                Rectangle2D rect = new Rectangle2D.Double(0,currentHeight,pageWidth,minHeightOfTable - currentHeight);
+                System.out.println(rect.toString());
                 getTextFromArea(pdfFile, pageNumberForPDFbox, tableIndex, rect);
-                currentHeight = maxHeightOfTable + 20 ;  // Set upper buffer as 20
+                currentHeight = maxHeightOfTable ;  // Set upper buffer as 20
                 tableIndex += 1;
 
                 if(tableIndex == (tables.size() + 1))
                 {
-                    tableHeight = pageHeight - currentHeight;
-                    rect = new Rectangle2D.Double(0,currentHeight,pageWidth,tableHeight);
+                    rect = new Rectangle2D.Double(0,currentHeight,pageWidth,pageHeight - currentHeight);
                     getTextFromArea(pdfFile, pageNumberForPDFbox, tableIndex, rect);
                 }
+            }
 
+            // if no table in current page
+            if(tables.size() == 0) {
+                Rectangle2D rect = new Rectangle2D.Double(0, 0, pageWidth, pageHeight);
+                getTextFromArea(pdfFile, pageNumberForPDFbox, 0, rect);
             }
         }
         catch(Exception e)
