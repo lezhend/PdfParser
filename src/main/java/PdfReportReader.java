@@ -36,9 +36,10 @@ public class PdfReportReader {
     }
 
     /**
-     * The upper level method to travers all the pages in one PDF file.
-     * 1. Traverse all pages, detect table regions, text regions and size of each page.
-     * 2. Using the result in step 1 to extract & generate final text result.
+     * The top level method to travers all the pages in one PDF file.
+     * 1. Traverse all pages;
+     * 2. detect table regions, text regions and size of each page.
+     * 3. Using the result in step 1&2 to extract & generate final text result.
      *
      * @return a list of String, each string is a line in pure .txt file.
      */
@@ -55,14 +56,14 @@ public class PdfReportReader {
         for(int pageIndex = 1; pageIndex <= pageNum; pageIndex++) {
             // Get tables in current page
             PdfPageInfo pdfPageInfo =
-                    singlePageTableExtractor(pageIndex, extractor);
+                    pageTableExtractor(pageIndex, extractor);
 
-            // Get text & table Regions based on tables and page size detected by Tabula
+            // Get text & table Regions based on PdfPageInfo
             double pageHeight = pdfPageInfo.getPageHeight();
             double pageWidth = pdfPageInfo.getPageWidth();
             List<Table> currentPageTables = pdfPageInfo.getTables();
             List<PdfRegion> currentPagePdfRegion =
-                    singlePagePdfRegionExtractor(currentPageTables, pageHeight, pageWidth);
+                    pagePdfRegionExtractor(currentPageTables, pageHeight, pageWidth);
             regions.add(new ArrayList<PdfRegion>(currentPagePdfRegion));
         }
         List<String> content = getTextFromRegions(pdDocumentforPDFBox, regions);
@@ -75,24 +76,24 @@ public class PdfReportReader {
      * @param extractor
      * @return
      */
-    private PdfPageInfo singlePageTableExtractor(int pageIndex, ObjectExtractor extractor) {
+    private PdfPageInfo pageTableExtractor(int pageIndex, ObjectExtractor extractor) {
         DetectionAlgorithm detector = new NurminenDetectionAlgorithm();
         technology.tabula.Page rawPage = extractor.extract(pageIndex);
-        technology.tabula.Page page = removeHeaderandFooter(rawPage);
-        List<Rectangle> guesses = detector.detect(page);
-        List<Table> singlePagetables = new ArrayList();
+        technology.tabula.Page pageNoHeaderFooter = removeHeaderFooter(rawPage);
+        List<Rectangle> guesses = detector.detect(pageNoHeaderFooter);
+        List<Table> tablesOfSinglePage = new ArrayList();
         BasicExtractionAlgorithm basicExtractor = new BasicExtractionAlgorithm();
         // Get all tables in single PDF page
         for (Rectangle guessRect : guesses) {
-            Page guess = page.getArea(guessRect);
-            singlePagetables.addAll(basicExtractor.extract(guess));
+            Page guess = pageNoHeaderFooter.getArea(guessRect);
+            tablesOfSinglePage.addAll(basicExtractor.extract(guess));
         }
 
         // Get width & height of this page
-        double pageHeight = page.getHeight();
-        double pageWidth = page.getWidth();
+        double pageHeight = pageNoHeaderFooter.getHeight();
+        double pageWidth = pageNoHeaderFooter.getWidth();
         PdfPageInfo pdfPageInfo =
-                new PdfPageInfo(singlePagetables, pageHeight, pageWidth);
+                new PdfPageInfo(tablesOfSinglePage, pageHeight, pageWidth);
         return pdfPageInfo;
     }
 
@@ -101,7 +102,6 @@ public class PdfReportReader {
      * @param table
      * @return
      */
-
     private String extractTableContext(Table table) {
         String tableContent = "";
         for(int i = 0; i < table.getRows().size(); i++) {
@@ -123,8 +123,8 @@ public class PdfReportReader {
      * @param pageWidth
      * @return
      */
-    private List<PdfRegion> singlePagePdfRegionExtractor(List<Table> singlePagetables,
-                                                         double pageHeight, double pageWidth) {
+    private List<PdfRegion> pagePdfRegionExtractor(List<Table> singlePagetables,
+                                                   double pageHeight, double pageWidth) {
         List<PdfRegion> singlePagePdfRegions = new ArrayList();
         int tableIndex = 0;
         double currentHeight = 0.0;
@@ -133,20 +133,24 @@ public class PdfReportReader {
             String currentTableContenxt = extractTableContext(tb);
 
             double minHeightOfTable = tb.getCell(0,0).getMinY();
-            double maxHeightOfTable = tb.getCell(tb.getRows().size()-1,0).getMaxY();
-            // Find the minimum height of table by visiting all columns of the first row
-            for(int j = 0; j < tb.getCols().size(); j++){
+            double maxHeightOfTable = tb.getCell(
+                    tb.getRows().size() - 1,0).getMaxY();
+            // Find the minimum height of table in the first row
+            for (int j = 0; j < tb.getCols().size(); j++){
                 if (tb.getCell(0,j).getMinY() == 0.0) {
                     continue;
                 }
-                if (minHeightOfTable == 0.0 || minHeightOfTable > tb.getCell(0,j).getMinY()) {
+                if (minHeightOfTable == 0.0 ||
+                        minHeightOfTable > tb.getCell(0,j).getMinY()) {
                     minHeightOfTable = tb.getCell(0,j).getMinY();
                 }
             }
-            // Find the maximum height of table by visiting all columns of the last row
-            for(int j = 0; j < tb.getCols().size(); j++) {
-                if (maxHeightOfTable < tb.getCell(tb.getRows().size() - 1, j).getMinY()) {
-                    maxHeightOfTable = tb.getCell(tb.getRows().size() - 1, j).getMaxY();
+            // Find the maximum height of table in the last row
+            for (int j = 0; j < tb.getCols().size(); j++) {
+                if (maxHeightOfTable < tb.getCell(
+                        tb.getRows().size() - 1, j).getMinY()) {
+                    maxHeightOfTable = tb.getCell(
+                            tb.getRows().size() - 1, j).getMaxY();
                 }
             }
 
@@ -154,27 +158,30 @@ public class PdfReportReader {
                     currentHeight, pageWidth,minHeightOfTable - currentHeight);
             Rectangle2D rectTable = new Rectangle2D.Double(0,
                     minHeightOfTable, pageWidth,maxHeightOfTable - minHeightOfTable);
-            PdfRegion tmpTextRegion = new PdfRegion(rectText, null, false);
-            PdfRegion tmpTableRegion = new PdfRegion(rectTable, currentTableContenxt, true);
+
+            PdfRegion tmpTextRegion = new PdfRegion(rectText,
+                    null, false);
+            PdfRegion tmpTableRegion = new PdfRegion(rectTable,
+                    currentTableContenxt, true);
 
             singlePagePdfRegions.add(tmpTextRegion);
             singlePagePdfRegions.add(tmpTableRegion);
             // may set upper buffer here
-            currentHeight = maxHeightOfTable;
+            currentHeight = maxHeightOfTable + 0.0;
             tableIndex++;
             // deal with the text area below the last table in current page
-            if(tableIndex == (singlePagetables.size()))
-            {
+            if (tableIndex == (singlePagetables.size())){
                 Rectangle2D bottomTextArea = new Rectangle2D.Double(0,currentHeight,
                         pageWidth,pageHeight - currentHeight);
-                singlePagePdfRegions.add(new PdfRegion(bottomTextArea, null, false));
+                PdfRegion bottomRegion = new PdfRegion(bottomTextArea, null, false);
+                singlePagePdfRegions.add(bottomRegion);
             }
         }
-
-        // if no table in current page
+        // if no table in current page, the whole page is a region
         if(singlePagetables.size() == 0) {
             Rectangle2D rect = new Rectangle2D.Double(0, 0, pageWidth, pageHeight);
-            singlePagePdfRegions.add(new PdfRegion(rect, null, false));
+            PdfRegion wholeRegion = new PdfRegion(rect, null, false);
+            singlePagePdfRegions.add(wholeRegion);
         }
         return singlePagePdfRegions;
     }
@@ -187,13 +194,12 @@ public class PdfReportReader {
      * @param regions
      * @return a list of String, each string is a line in pure .txt file.
      */
-
-    private List<String> getTextFromRegions(PDDocument pdDocument, List<List<PdfRegion>> regions) {
+    private List<String> getTextFromRegions(PDDocument pdDocument, List<List<PdfRegion>> regions){
         List<String> content = new ArrayList();
         PDFTextStripperByArea stripperByArea = null;
         int pageNum = pdDocument.getNumberOfPages();
         try {
-            for(int pageIndex = 0; pageIndex < pageNum; pageIndex++) {
+            for (int pageIndex = 0; pageIndex < pageNum; pageIndex++){
                 List<PdfRegion> curRegions = regions.get(pageIndex);
                 stripperByArea = new PDFTextStripperByArea();
                 stripperByArea.setSortByPosition(true);
@@ -203,23 +209,26 @@ public class PdfReportReader {
                 int maxRegionIndex = curRegions.size() - 1;
                 int curTableIndex = 0;
                 // Add all regions to the stripper and tag reagions with number.
-                for(PdfRegion rect: curRegions) {
+                for (PdfRegion rect: curRegions){
                     stripperByArea.addRegion(Integer.toString(curTableIndex), rect.getRect());
                     curTableIndex++;
                 }
                 // Deal with regions added in last step.
-                for(curTableIndex = 0; curTableIndex <= maxRegionIndex; curTableIndex++) {
+                for (curTableIndex = 0; curTableIndex <= maxRegionIndex; curTableIndex++){
                     String text = "";
-                    // if dealing with a table region, we just fetch the table content we extracted earlier.
+                    // if table region, just fetch the table content extracted earlier.
                     if(curRegions.get(curTableIndex).isTable()) {
-                        // The space before \n is necessary.
-                        // Because later we will cut the whole Stringbuilder in terms of space
+                        /*
+                        The space before \n is necessary.
+                        Because later we will cut the whole Stringbuilder in terms of space.
+                         */
+
                         text = " \n" + TABLE_START_TAG + " \n" +
                                 curRegions.get(curTableIndex).getTableContent() +
                                 " \n" + TABLE_END_TAG + " \n";
                         contentBuilder.append(text);
                     }
-                    // if dealing with pure text region, extract text from it.
+                    // if pure text region, extract text from it.
                     else {
                         stripperByArea.extractRegions(pdDocument.getPage(pageIndex));
                         text = stripperByArea.getTextForRegion(Integer.toString(curTableIndex));
@@ -240,11 +249,11 @@ public class PdfReportReader {
                         tempsb.delete(0, tempsb.length());
                         continue;
                     }
-                    // If not a start of new paragraph, keep append to current sb
+                    // If not a start of new paragraph, keep append to current sb.
                     if(!isNewparagraph){
                         tempsb.append(line.replaceAll("\n", ""));
                     }
-                    // If we find new paragraph, firstly add current sb to list, then clear sb
+                    // If we find new paragraph, firstly add current sb to list, then clear sb.
                     else {
                         paragraphs.add(tempsb.toString()  + "\n");
                         tempsb.delete(0, tempsb.length());
@@ -268,13 +277,14 @@ public class PdfReportReader {
      * @param page
      * @return
      */
-    private technology.tabula.Page removeHeaderandFooter(technology.tabula.Page page) {
+    private technology.tabula.Page removeHeaderFooter(technology.tabula.Page page) {
         float pageHeight = (float)page.getHeight();
         float pageWidth = (float)page.getWidth();
         /*
-           In my case, 0.955 is the largest gate value to ignore the page footer on tested sample PDF file.
+           In my test case, 0.955 is the largest gate value to remove
+           the page footer on tested sample PDF file.
            However, this is not a reliable method to remove header & footer.
-           Since the height of header & footer varies from different PDF.
+           Since the height of header & footer varies from different PDF files.
          */
         float bottom = (float)(pageHeight * 0.955);
         float top = (float)(pageHeight * 0.01);
